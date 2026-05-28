@@ -15,6 +15,9 @@ class AIService
             if (config('services.openai.key')) {
                 return $this->generateWithOpenAI($task);
             }
+            if (config('services.gemini.key')) {
+                return $this->generateWithGemini($task);
+            }
         } catch (Throwable $exception) {
             Log::warning('AI summary generation failed; using fallback.', [
                 'task_id' => $task->id,
@@ -44,9 +47,46 @@ class AIService
                 'temperature' => 0.2,
             ])
             ->throw()
-            ->json('choices.0.message.content');
+            ->json();
 
-        $data = json_decode($response, true, flags: JSON_THROW_ON_ERROR);
+        $content = $response['choices'][0]['message']['content'] ?? '';
+        $data = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+
+        return $this->normalizeResponse($data);
+    }
+
+    private function generateWithGemini(Task $task): array
+    {
+        $response = Http::timeout(20)
+            ->post('https://generativelanguage.googleapis.com/v1beta/models/' . config('services.gemini.model') . ':generateContent', [
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            [
+                                'text' => $this->prompt($task),
+                            ],
+                        ],
+                    ],
+                ],
+                'systemInstruction' => [
+                    'parts' => [
+                        [
+                            'text' => 'You summarize task-management items and classify urgency. Return only valid JSON with ai_summary and ai_priority keys. ai_priority must be low, medium, or high.',
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.2,
+                ],
+            ], [
+                'key' => config('services.gemini.key'),
+            ])
+            ->throw()
+            ->json();
+
+        $content = $response['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        $data = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
 
         return $this->normalizeResponse($data);
     }
