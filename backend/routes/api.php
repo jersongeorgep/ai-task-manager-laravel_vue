@@ -27,6 +27,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/dashboard', DashboardController::class);
+    Route::post('/tasks/generate-description', [TaskController::class, 'generateDescription']);
     Route::get('/tasks/{task}/ai-summary', [TaskController::class, 'aiSummary']);
     Route::patch('/tasks/{task}/status', [TaskController::class, 'updateStatus']);
     Route::apiResource('tasks', TaskController::class);

@@ -9,8 +9,10 @@ use App\Http\Requests\UpdateTaskRequest;
 use App\Http\Requests\UpdateTaskStatusRequest;
 use App\Http\Resources\TaskResource;
 use App\Models\Task;
+use App\Services\AIService;
 use App\Services\TaskService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class TaskController extends Controller
@@ -56,6 +58,17 @@ class TaskController extends Controller
         return new TaskResource(
             $this->tasks->updateStatus($task, $request->validated('status'))->load('user')
         );
+    }
+
+    public function generateDescription(Request $request, AIService $aiService): JsonResponse
+    {
+        $request->validate([
+            'title' => 'required|string|max:255',
+        ]);
+
+        return response()->json([
+            'description' => $aiService->generateDescription($request->input('title')),
+        ]);
     }
 
     public function aiSummary(Task $task): JsonResponse

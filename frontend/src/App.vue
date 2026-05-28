@@ -15,6 +15,7 @@ const aiSummary = ref(null)
 const mode = ref('list')
 const loading = ref(false)
 const saving = ref(false)
+const isGeneratingDescription = ref(false)
 const error = ref('')
 const fieldErrors = ref({})
 
@@ -224,6 +225,24 @@ async function saveTask() {
   }
 }
 
+async function generateDescription() {
+  if (!taskForm.title) return
+  isGeneratingDescription.value = true
+  resetErrors()
+
+  try {
+    const payload = await api('/tasks/generate-description', {
+      method: 'POST',
+      body: { title: taskForm.title },
+    })
+    taskForm.description = payload.description
+  } catch (exception) {
+    handleApiError(exception)
+  } finally {
+    isGeneratingDescription.value = false
+  }
+}
+
 async function openDetail(task) {
   resetErrors()
   aiSummary.value = null
@@ -261,9 +280,15 @@ async function loadAiSummary() {
   resetErrors()
 
   try {
+    console.log('Calling AI summary API for task:', selectedTask.value.id)
     const payload = await api(`/tasks/${selectedTask.value.id}/ai-summary`)
-    aiSummary.value = payload.data
+    console.log('AI summary response:', payload)
+    aiSummary.value = { ...payload.data }
+    selectedTask.value.ai_summary = payload.data.ai_summary
+    selectedTask.value.ai_priority = payload.data.ai_priority
+    console.log('AI summary updated:', aiSummary.value)
   } catch (exception) {
+    console.error('AI summary error:', exception)
     handleApiError(exception)
   } finally {
     loading.value = false
@@ -461,7 +486,12 @@ onMounted(async () => {
                 <p v-if="fieldErrors.title" class="mt-1 text-xs text-rose-600">{{ fieldErrors.title[0] }}</p>
               </div>
               <div class="md:col-span-2">
-                <label for="description">Description</label>
+                <div class="flex justify-between items-center mb-1">
+                  <label for="description" class="mb-0">Description</label>
+                  <button type="button" class="btn btn-muted text-xs py-1 px-2" @click="generateDescription" :disabled="isGeneratingDescription || !taskForm.title">
+                    {{ isGeneratingDescription ? 'Generating...' : 'AI Generate' }}
+                  </button>
+                </div>
                 <textarea id="description" v-model="taskForm.description" rows="5"></textarea>
               </div>
               <div>

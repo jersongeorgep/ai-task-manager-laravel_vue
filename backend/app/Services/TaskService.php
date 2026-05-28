@@ -69,13 +69,7 @@ class TaskService
 
     public function aiSummary(Task $task): array
     {
-        if ($task->ai_summary && $task->ai_priority) {
-            return [
-                'ai_summary' => $task->ai_summary,
-                'ai_priority' => $task->ai_priority,
-            ];
-        }
-
+        // Always regenerate AI summary to reflect current task data
         $aiData = $this->aiService->generateSummary($task);
         $this->tasks->update($task->id, $aiData);
 

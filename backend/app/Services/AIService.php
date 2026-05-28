@@ -9,6 +9,25 @@ use Throwable;
 
 class AIService
 {
+    public function generateDescription(string $title): string
+    {
+        try {
+            if (config('services.openai.key')) {
+                return $this->generateDescriptionWithOpenAI($title);
+            }
+            if (config('services.gemini.key')) {
+                return $this->generateDescriptionWithGemini($title);
+            }
+        } catch (Throwable $exception) {
+            Log::warning('AI description generation failed; using fallback.', [
+                'title' => $title,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
+        return "Description for: {$title}";
+    }
+
     public function generateSummary(Task $task): array
     {
         try {
@@ -31,6 +50,7 @@ class AIService
     private function generateWithOpenAI(Task $task): array
     {
         $response = Http::withToken(config('services.openai.key'))
+            ->withOptions(['verify' => false])
             ->timeout(20)
             ->post('https://api.openai.com/v1/chat/completions', [
                 'model' => config('services.openai.model', 'gpt-4o-mini'),
@@ -57,8 +77,12 @@ class AIService
 
     private function generateWithGemini(Task $task): array
     {
+        $model = config('services.gemini.model', 'gemini-1.5-flash');
+        $key = config('services.gemini.key');
+
         $response = Http::timeout(20)
-            ->post('https://generativelanguage.googleapis.com/v1beta/models/' . config('services.gemini.model') . ':generateContent', [
+            ->withOptions(['verify' => false])
+            ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$key}", [
                 'contents' => [
                     [
                         'role' => 'user',
@@ -79,8 +103,6 @@ class AIService
                 'generationConfig' => [
                     'temperature' => 0.2,
                 ],
-            ], [
-                'key' => config('services.gemini.key'),
             ])
             ->throw()
             ->json();
@@ -141,5 +163,65 @@ class AIService
         }
 
         return $task->priority ?: 'medium';
+    }
+
+    private function generateDescriptionWithOpenAI(string $title): string
+    {
+        $response = Http::withToken(config('services.openai.key'))
+            ->withOptions(['verify' => false])
+            ->timeout(20)
+            ->post('https://api.openai.com/v1/chat/completions', [
+                'model' => config('services.openai.model', 'gpt-4o-mini'),
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are a task management assistant. Generate a concise, helpful task description (2-3 sentences) based on the task title.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => "Generate a description for this task: {$title}",
+                    ],
+                ],
+                'temperature' => 0.7,
+            ])
+            ->throw()
+            ->json();
+
+        return $response['choices'][0]['message']['content'] ?? "Description for: {$title}";
+    }
+
+    private function generateDescriptionWithGemini(string $title): string
+    {
+        $model = config('services.gemini.model', 'gemini-1.5-flash');
+        $key = config('services.gemini.key');
+
+        $response = Http::timeout(20)
+            ->withOptions(['verify' => false])
+            ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$key}", [
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            [
+                                'text' => "Generate a description for this task: {$title}",
+                            ],
+                        ],
+                    ],
+                ],
+                'systemInstruction' => [
+                    'parts' => [
+                        [
+                            'text' => 'You are a task management assistant. Generate a concise, helpful task description (2-3 sentences) based on the task title.',
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.7,
+                ],
+            ])
+            ->throw()
+            ->json();
+
+        return $response['candidates'][0]['content']['parts'][0]['text'] ?? "Description for: {$title}";
     }
 }
